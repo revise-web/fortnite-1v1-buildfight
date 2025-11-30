@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fortnite 1V1 Build Fight - Fonctionnel</title>
+    <title>Fortnite 1V1 Build Fight - Démarrage Rapide</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         canvas { display: block; }
@@ -41,6 +41,8 @@
             z-index: 2;
         }
     </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
 </head>
 <body>
     <div id="blocker">
@@ -48,26 +50,241 @@
             <h1>Fortnite 1V1 Builder (AZERTY)</h1>
             <p style="font-size: 40px; margin-bottom: 20px;">Cliquez pour Jouer</p>
             <p>
-                Mouvement: **Z** (Avancer) / **Q** (Gauche) / **S** (Reculer) / **D** (Droite)<br/>
-                Regarder: Souris<br/>
-                <br/>
-                Construction:<br/>
-                **1**: Mur (Wall) &nbsp;&nbsp; **2**: Sol (Floor) &nbsp;&nbsp; **3**: Rampe (Ramp)<br/>
-                (Appuyez à nouveau sur 1/2/3 ou sur Échap pour désactiver la construction)<br/>
-                <br/>
-                **CLIC GAUCHE** pour Placer la structure
+                Mouvement: **Z** / **Q** / **S** / **D**<br/>
+                Construction: **1** (Mur) / **2** (Sol) / **3** (Rampe)<br/>
+                **CLIC GAUCHE** pour Placer | Échap pour quitter
             </p>
         </div>
     </div>
-
     <div id="current-mode">Mode: **Exploration**</div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-    
-    <script src="./js/main.js"></script>
-
     <script>
+        // --- VARIABLES GLOBALES ---
+        let scene, camera, renderer, controls, playerObject;
+        let prevTime = performance.now();
+        const currentModeDisplay = document.getElementById('current-mode');
+
+        let isLocked = false, moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let velocity = new THREE.Vector3();
+        const speed = 150.0, playerHeight = 2; 
+
+        let isBuilding = false, currentStructure = null, ghostMesh = null;
+        const buildSize = 4;
+        const structures = {
+            'Wall': { color: 0x6e4e37, geometry: new THREE.BoxGeometry(buildSize, buildSize, 0.2) },
+            'Floor': { color: 0x8f8f8f, geometry: new THREE.BoxGeometry(buildSize, 0.2, buildSize) },
+            'Ramp': { color: 0x4e6e37, geometry: new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize) }
+        };
+
+        // --- FONCTION INIT ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87ceeb);
+            scene.fog = new THREE.Fog(0x87ceeb, 0, 75); 
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.y = playerHeight; 
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            controls = new THREE.PointerLockControls(camera, document.body);
+            playerObject = controls.getObject();
+            setupPointerLockEvents();
+            scene.add(playerObject);
+
+            scene.add(new THREE.AmbientLight(0x404040, 3)); 
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(50, 100, 50);
+            scene.add(directionalLight);
+
+            createFloor();
+            setupKeyEvents();
+            window.addEventListener('resize', onWindowResize, false);
+            animate(); 
+        }
+
+        // --- CONFIGURATION ---
+        function setupPointerLockEvents() {
+            const blocker = document.getElementById('blocker');
+            const instructions = document.getElementById('instructions');
+            instructions.addEventListener('click', () => { controls.lock(); }, false);
+
+            controls.addEventListener('lock', () => {
+                instructions.style.display = 'none';
+                blocker.style.display = 'none';
+                isLocked = true;
+                updateModeDisplay(false);
+            });
+
+            controls.addEventListener('unlock', () => {
+                blocker.style.display = 'block';
+                instructions.style.display = '';
+                isLocked = false;
+                disableBuildingMode();
+                updateModeDisplay(false); 
+            });
+        }
+
+        function setupKeyEvents() {
+            const onKeyDown = function (event) {
+                switch (event.code) {
+                    case 'KeyZ': moveForward = true; break;
+                    case 'KeyQ': moveLeft = true; break;
+                    case 'KeyS': moveBackward = true; break;
+                    case 'KeyD': moveRight = true; break;
+                    case 'Digit1': toggleBuildingMode('Wall'); break;
+                    case 'Digit2': toggleBuildingMode('Floor'); break;
+                    case 'Digit3': toggleBuildingMode('Ramp'); break;
+                    case 'Escape': if (isBuilding) disableBuildingMode(); break;
+                }
+            };
+            const onKeyUp = function (event) {
+                switch (event.code) {
+                    case 'KeyZ': moveForward = false; break;
+                    case 'KeyQ': moveLeft = false; break;
+                    case 'KeyS': moveBackward = false; break;
+                    case 'KeyD': moveRight = false; break;
+                }
+            };
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            document.addEventListener('mousedown', (event) => {
+                if (event.button === 0) { placeStructure(); }
+            }, false);
+        }
+
+        function createFloor() {
+            const floorGeometry = new THREE.PlaneGeometry(100, 100, 1, 1);
+            const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x4a4a4a, side: THREE.DoubleSide });
+            const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+            floor.rotation.x = Math.PI / 2;
+            floor.position.y = 0;
+            scene.add(floor);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- LOGIQUE DE CONSTRUCTION ---
+        function updateModeDisplay(type) {
+            if (isLocked) {
+                currentModeDisplay.innerHTML = type ? `Mode: **Construction (${type})**` : `Mode: **Exploration**`;
+            }
+        }
+
+        function createGhostMesh(type) {
+            let geometry = (type === 'Ramp') ? new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize) : structures[type].geometry.clone();
+            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, transparent: true, opacity: 0.5, depthWrite: false });
+            return new THREE.Mesh(geometry, material);
+        }
+
+        function toggleBuildingMode(type) {
+            if (!isLocked) return;
+            if (isBuilding && currentStructure === type) {
+                disableBuildingMode();
+            } else {
+                if (ghostMesh) scene.remove(ghostMesh);
+                isBuilding = true;
+                currentStructure = type;
+                ghostMesh = createGhostMesh(type);
+                scene.add(ghostMesh);
+                updateModeDisplay(type);
+            }
+        }
+
+        function disableBuildingMode() {
+            isBuilding = false;
+            currentStructure = null;
+            if (ghostMesh) { scene.remove(ghostMesh); ghostMesh = null; }
+            updateModeDisplay(false);
+        }
+
+        function placeStructure() {
+            if (isLocked && isBuilding && ghostMesh) { 
+                const type = currentStructure;
+                let geometry, rotation = ghostMesh.rotation.clone();
+
+                if (type === 'Ramp') {
+                    geometry = new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize);
+                    rotation.x = -Math.PI / 8; 
+                } else {
+                    geometry = structures[type].geometry.clone();
+                }
+
+                const material = new THREE.MeshPhongMaterial({ color: structures[type].color });
+                const permanentStructure = new THREE.Mesh(geometry, material);
+
+                permanentStructure.position.copy(ghostMesh.position);
+                permanentStructure.rotation.copy(rotation);
+                scene.add(permanentStructure);
+            }
+        }
+
+        function updateGhostPosition() {
+            const playerPosition = playerObject.position;
+            const direction = new THREE.Vector3();
+            camera.getWorldDirection(direction);
+            direction.normalize();
+
+            let targetPosition = playerPosition.clone().add(direction.multiplyScalar(buildSize * 2)); 
+            let snappedX = Math.round(targetPosition.x / buildSize) * buildSize;
+            let snappedZ = Math.round(targetPosition.z / buildSize) * buildSize;
+            let snappedY = Math.round(playerPosition.y / buildSize) * buildSize; 
+            
+            if (currentStructure === 'Wall') {
+                snappedY += buildSize / 2;
+                ghostMesh.position.set(snappedX, snappedY, snappedZ);
+                ghostMesh.rotation.y = (Math.abs(direction.x) > Math.abs(direction.z)) ? Math.PI / 2 : 0;
+            } else if (currentStructure === 'Floor') {
+                snappedY += 0.1;
+                ghostMesh.position.set(snappedX, snappedY, snappedZ);
+                ghostMesh.rotation.y = 0;
+            } else if (currentStructure === 'Ramp') {
+                snappedY += buildSize / 4; 
+                ghostMesh.position.set(snappedX, snappedY, snappedZ);
+                let angle = Math.atan2(direction.x, direction.z);
+                ghostMesh.rotation.y = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
+            }
+        }
+
+        // --- BOUCLE DE RENDU (ANIMATION) ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+
+            if (isLocked) {
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                
+                if (moveForward) velocity.z -= speed * delta;
+                if (moveBackward) velocity.z += speed * delta;
+                if (moveLeft) velocity.x -= speed * delta;
+                if (moveRight) velocity.x += speed * delta;
+
+                controls.moveRight(velocity.x * delta);
+                controls.moveForward(velocity.z * delta);
+                
+                if (playerObject.position.y > playerHeight) {
+                    velocity.y -= 9.8 * delta; 
+                } else {
+                    velocity.y = 0;
+                    playerObject.position.y = playerHeight; 
+                }
+                playerObject.position.y += velocity.y * delta;
+                
+                if (isBuilding && ghostMesh) {
+                    updateGhostPosition();
+                }
+            }
+            renderer.render(scene, camera);
+            prevTime = time;
+        }
+
+        // Lance le jeu après le chargement du DOM
         document.addEventListener('DOMContentLoaded', (event) => {
             if (typeof init === 'function') {
                 init();
