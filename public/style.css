@@ -1,0 +1,7 @@
+/* style.css */
+* { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+body { background: #0f1724; color: #eee; display: flex; align-items: center; justify-content: center; height: 100vh; }
+#ui { width: 1000px; }
+#topbar { display:flex; justify-content:space-between; padding:8px 4px; color:#ddd; margin-bottom:6px; }
+canvas { background: linear-gradient(180deg,#7fb3ff,#87ceeb); border: 2px solid #111; display:block; margin: 0 auto; }
+#hint { color: #ddd; font-size: 13px; padding: 8px; text-align:center;}
