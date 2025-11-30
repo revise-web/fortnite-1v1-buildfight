@@ -1,5 +1,6 @@
 // --- VARIABLES GLOBALES ---
 let scene, camera, renderer, controls;
+let playerObject; // Référence à controls.getObject()
 let prevTime = performance.now();
 
 // Contrôle du mouvement (ZQSD)
@@ -10,16 +11,19 @@ let moveLeft = false;
 let moveRight = false;
 let velocity = new THREE.Vector3();
 const speed = 150.0; 
+const playerHeight = 2; // Hauteur des yeux du joueur
 
 // Variables de construction
 let isBuilding = false;
-let currentStructure = 'Wall'; // Par défaut, on construit un mur
+let currentStructure = 'Wall'; 
 let ghostMesh = null;
 const buildSize = 4; // Taille d'un bloc de construction (4x4m)
+
+// Définition des structures avec géométrie et couleur de base
 const structures = {
     'Wall': { color: 0x6e4e37, geometry: new THREE.BoxGeometry(buildSize, buildSize, 0.2) },
     'Floor': { color: 0x8f8f8f, geometry: new THREE.BoxGeometry(buildSize, 0.2, buildSize) },
-    'Ramp': { color: 0x4e6e37, geometry: new THREE.BoxGeometry(buildSize, 0.2, buildSize) } // Rampe sera ajustée
+    'Ramp': { color: 0x4e6e37, geometry: new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize) } // Rampe (ajustée dans la fonction)
 };
 
 // --- FONCTIONS D'INITIALISATION ---
@@ -27,12 +31,12 @@ const structures = {
 function init() {
     // 1. SCÈNE
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Ciel bleu
-    scene.fog = new THREE.Fog(0x87ceeb, 0, 75); // Brouillard léger
+    scene.background = new THREE.Color(0x87ceeb);
+    scene.fog = new THREE.Fog(0x87ceeb, 0, 75); 
 
     // 2. CAMÉRA
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.y = 2; 
+    camera.position.y = playerHeight; 
 
     // 3. RENDU
     renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -41,8 +45,9 @@ function init() {
 
     // 4. CONTRÔLES (PointerLock)
     controls = new THREE.PointerLockControls(camera, document.body);
+    playerObject = controls.getObject();
     setupPointerLockEvents();
-    scene.add(controls.getObject());
+    scene.add(playerObject);
 
     // 5. LUMIÈRES
     scene.add(new THREE.AmbientLight(0x404040, 3)); 
@@ -58,9 +63,9 @@ function init() {
 
     // 8. REDIMENSIONNEMENT
     window.addEventListener('resize', onWindowResize, false);
-
-    // Démarrage de la boucle de rendu
-    animate();
+    
+    // NOTE : La fonction animate() est lancée dans la fonction init() si le DOM est chargé (voir index.html)
+    animate(); 
 }
 
 // --- CONFIGURATION ---
@@ -69,7 +74,10 @@ function setupPointerLockEvents() {
     const blocker = document.getElementById('blocker');
     const instructions = document.getElementById('instructions');
 
-    instructions.addEventListener('click', () => { controls.lock(); }, false);
+    instructions.addEventListener('click', () => { 
+        // Lancement du PointerLock au clic sur les instructions
+        controls.lock(); 
+    }, false);
 
     controls.addEventListener('lock', () => {
         instructions.style.display = 'none';
@@ -112,7 +120,12 @@ function setupKeyEvents() {
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
-    document.addEventListener('mousedown', placeStructure, false);
+    // Clic gauche pour placer la structure
+    document.addEventListener('mousedown', (event) => {
+        if (event.button === 0) { 
+            placeStructure(); 
+        }
+    }, false);
 }
 
 function createFloor() {
@@ -128,13 +141,15 @@ function createFloor() {
 
 function createGhostMesh(type) {
     let geometry;
-    // La rampe est une simple boite inclinée pour l'instant (simplification)
+    
+    // Ajustement de la géométrie de la rampe pour le rendu
     if (type === 'Ramp') {
         geometry = new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize);
     } else {
         geometry = structures[type].geometry.clone();
     }
     
+    // Matériau semi-transparent
     const material = new THREE.MeshBasicMaterial({
         color: 0x00ff00,
         transparent: true,
@@ -147,7 +162,6 @@ function createGhostMesh(type) {
 function enableBuildingMode(type) {
     if (!isLocked) return;
     
-    // Si on change de structure ou si on n'est pas en mode construction
     if (ghostMesh) {
         scene.remove(ghostMesh);
     }
@@ -156,7 +170,6 @@ function enableBuildingMode(type) {
     currentStructure = type;
     ghostMesh = createGhostMesh(type);
     scene.add(ghostMesh);
-    console.log(`Mode construction activé : ${type}`);
 }
 
 function disableBuildingMode() {
@@ -167,17 +180,16 @@ function disableBuildingMode() {
     }
 }
 
-function placeStructure(event) {
-    if (isLocked && isBuilding && event.button === 0) { // Clic gauche
-        if (!ghostMesh) return;
-
+function placeStructure() {
+    if (isLocked && isBuilding && ghostMesh) { 
         const type = currentStructure;
         let geometry;
         let rotation = ghostMesh.rotation.clone();
 
+        // Recréation de la géométrie de la rampe
         if (type === 'Ramp') {
             geometry = new THREE.BoxGeometry(buildSize, buildSize * 0.5, buildSize);
-            rotation.x = -Math.PI / 8; // Inclinaison de la rampe
+            rotation.x = -Math.PI / 8; // Inclinaison de la rampe pour la rendre utilisable
         } else {
             geometry = structures[type].geometry.clone();
         }
@@ -189,15 +201,15 @@ function placeStructure(event) {
         permanentStructure.rotation.copy(rotation);
 
         scene.add(permanentStructure);
-        // La mécanique de destruction (raycasting) serait ajoutée ici.
+        
+        // Optionnel: Mettre fin au mode construction après placement (ou laisser actif)
+        // disableBuildingMode(); 
     }
 }
 
 function updateGhostPosition() {
-    const playerObject = controls.getObject();
     const playerPosition = playerObject.position;
     
-    // Obtenir la direction de la caméra
     const direction = new THREE.Vector3();
     camera.getWorldDirection(direction);
     direction.normalize();
@@ -205,39 +217,35 @@ function updateGhostPosition() {
     // Position cible : 8m (buildSize * 2) devant le joueur
     let targetPosition = playerPosition.clone().add(direction.multiplyScalar(buildSize * 2)); 
     
-    // SNAPPING sur la grille
+    // SNAPPING
     let snappedX = Math.round(targetPosition.x / buildSize) * buildSize;
     let snappedZ = Math.round(targetPosition.z / buildSize) * buildSize;
-    let snappedY = 0;
-
-    // Détermination de la hauteur du sol le plus proche (simplification)
-    snappedY = Math.round(playerPosition.y / buildSize) * buildSize;
+    
+    // Hauteur de la grille (simplification, pour l'instant on snap à 0, 4, 8, etc.)
+    let snappedY = Math.round(playerPosition.y / buildSize) * buildSize; 
     
     // Ajustements pour les différents types de structures
     if (currentStructure === 'Wall') {
-        snappedY += buildSize / 2; // Centre du mur à mi-hauteur
+        snappedY += buildSize / 2; 
         ghostMesh.position.set(snappedX, snappedY, snappedZ);
 
-        // Orientation du mur (le long de l'axe X ou Z, le plus perpendiculaire à la vue)
         if (Math.abs(direction.x) > Math.abs(direction.z)) {
-            ghostMesh.rotation.y = Math.PI / 2;
+            ghostMesh.rotation.y = Math.PI / 2; // Axe Z
         } else {
-            ghostMesh.rotation.y = 0;
+            ghostMesh.rotation.y = 0; // Axe X
         }
 
     } else if (currentStructure === 'Floor') {
-        snappedY += 0.1; // Légèrement au-dessus de la hauteur de la grille
+        snappedY += 0.1; 
         ghostMesh.position.set(snappedX, snappedY, snappedZ);
         ghostMesh.rotation.y = 0;
 
     } else if (currentStructure === 'Ramp') {
-        // La rampe doit être placée une demi-unité en hauteur par rapport au sol
         snappedY += buildSize / 4; 
         ghostMesh.position.set(snappedX, snappedY, snappedZ);
         
-        // La rampe doit être orientée dans la direction du joueur
+        // Orientation dans la direction de la caméra (alignée sur 4 directions)
         let angle = Math.atan2(direction.x, direction.z);
-        // Alignement sur 45 degrés pour les 4 directions principales
         let snappedAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
         ghostMesh.rotation.y = snappedAngle;
     }
@@ -252,11 +260,10 @@ function animate() {
     const delta = (time - prevTime) / 1000;
 
     if (isLocked) {
-        // Mouvement fluide du joueur
+        // Mouvement et friction
         velocity.x -= velocity.x * 10.0 * delta;
         velocity.z -= velocity.z * 10.0 * delta;
-
-        // Vitesse d'avancement/recul et latéral (ZQSD)
+        
         if (moveForward) velocity.z -= speed * delta;
         if (moveBackward) velocity.z += speed * delta;
         if (moveLeft) velocity.x -= speed * delta;
@@ -265,16 +272,16 @@ function animate() {
         controls.moveRight(velocity.x * delta);
         controls.moveForward(velocity.z * delta);
         
-        // Simuler la gravité et le plancher
-        if (playerObject.position.y > 2) {
+        // Gravité / Plan de sol simple
+        if (playerObject.position.y > playerHeight) {
              velocity.y -= 9.8 * delta; // Gravité
         } else {
              velocity.y = 0;
-             playerObject.position.y = 2; // Position Y des yeux au-dessus du sol (y=0)
+             playerObject.position.y = playerHeight; // Toujours à la hauteur des yeux
         }
         playerObject.position.y += velocity.y * delta;
         
-        // Mettre à jour la position du fantôme si on est en mode construction
+        // Mise à jour de la position du fantôme
         if (isBuilding && ghostMesh) {
             updateGhostPosition();
         }
@@ -290,5 +297,4 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Lancement du programme
-init();
+// NOTE : La fonction init() sera appelée par l'écouteur DOMContentLoaded dans index.html
