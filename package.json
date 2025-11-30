@@ -1,0 +1,16 @@
+{
+  "name": "fortnite-1v1-buildfight",
+  "version": "1.0.0",
+  "description": "Simple browser 1v1 buildfight demo with Node + Socket.io",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "NODE_ENV=development node server.js"
+  },
+  "author": "IsmaDVL",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^4.7.2"
+  }
+}
