@@ -1,23 +1,21 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>1v1 Buildfight - Demo</title>
+  <title>1v1 Buildfight 3D - Demo</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div id="ui">
-    <div id="topbar">
-      <span id="room">Room: Demo</span>
-      <span id="myname"></span>
-      <button id="respawn">Respawn</button>
+    <div id="hud">
+      <span id="info">AZERTY: Z/Q/S/D pour déplacer • Espace sauter • Clic gauche construire • Shift courir</span>
     </div>
-    <canvas id="game" width="1000" height="600"></canvas>
-    <div id="hint">WASD to move, SPACE to jump, Click to shoot, Right-click to place block, Shift+Right-click to remove block</div>
+    <canvas id="canvas"></canvas>
   </div>
 
-  <script src="/socket.io/socket.io.js"></script>
-  <script src="/client.js"></script>
+  <!-- Three.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r155/three.min.js"></script>
+  <script src="/main.js"></script>
 </body>
 </html>
