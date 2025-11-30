@@ -1,68 +1,163 @@
-// Déclaration des variables globales
-let scene, camera, renderer, cube;
+// --- Déclaration des variables globales (au début de main.js) ---
+let scene, camera, renderer; // Laissez ces variables
+let controls; // Nouvelle variable pour les contrôles
+let isLocked = false; // État du PointerLock
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+let velocity = new THREE.Vector3(); // Vitesse du joueur
+const speed = 100.0; // Vitesse de déplacement
 
-// --- 1. FONCTION D'INITIALISATION ---
+// --- 1. FONCTION D'INITIALISATION (Dans init()) ---
+
+// Remplacez l'ancienne caméra (qui n'avait pas de mouvement) par la nouvelle logique :
 function init() {
-    // 1.1 SCENE
-    // La scène est le conteneur où tous les objets 3D seront placés.
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x87ceeb); // Couleur de ciel bleu clair
+    // ... (SCENE, RENDU - comme avant) ...
 
-    // 1.2 CAMÉRA
+    // --- 1.2 CAMÉRA ---
     // La caméra définit l'angle de vue du joueur.
-    // Paramètres : Field of View (FOV), Aspect Ratio, Near, Far
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.z = 5;
-    camera.position.y = 2; // Position de la caméra légèrement en hauteur
+    camera.position.y = 2; // Hauteur des yeux
 
-    // 1.3 RENDU (RENDERER)
-    // Le renderer dessine la scène 3D sur un élément HTML <canvas>.
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    document.body.appendChild(renderer.domElement);
+    // --- 1.4 CONTRÔLES (NOUVEAU) ---
+    // Le PointerLockControls gère la rotation de la vue et le mouvement FPS
+    controls = new THREE.PointerLockControls(camera, document.body);
 
-    // 1.4 AJOUTER UN CUBE (pour tester)
-    // Créer une géométrie (la forme) et un matériau (l'apparence)
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Rouge
-    cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
+    const blocker = document.getElementById('blocker');
+    const instructions = document.getElementById('instructions');
 
-    // 1.5 LUMIÈRE
-    // Indispensable pour voir les objets avec des matériaux non-Basic
-    const ambientLight = new THREE.AmbientLight(0x404040, 5); // Lumière douce
-    scene.add(ambientLight);
+    // Écouteur pour activer les contrôles lorsque l'utilisateur clique
+    instructions.addEventListener('click', function () {
+        controls.lock();
+    }, false);
+
+    // Événements de verrouillage (lock) et déverrouillage (unlock)
+    controls.addEventListener('lock', function () {
+        instructions.style.display = 'none';
+        blocker.style.display = 'none';
+        isLocked = true;
+    });
+
+    controls.addEventListener('unlock', function () {
+        blocker.style.display = 'block';
+        instructions.style.display = '';
+        isLocked = false;
+    });
+
+    scene.add(controls.getObject()); // Ajoute le conteneur de la caméra à la scène
+
+    // --- 1.5 GESTION DES TOUCHES (NOUVEAU) ---
+    const onKeyDown = function (event) {
+        switch (event.code) {
+            case 'KeyW':
+            case 'ArrowUp':
+                moveForward = true;
+                break;
+            case 'KeyA':
+            case 'ArrowLeft':
+                moveLeft = true;
+                break;
+            case 'KeyS':
+            case 'ArrowDown':
+                moveBackward = true;
+                break;
+            case 'KeyD':
+            case 'ArrowRight':
+                moveRight = true;
+                break;
+        }
+    };
+
+    const onKeyUp = function (event) {
+        switch (event.code) {
+            case 'KeyW':
+            case 'ArrowUp':
+                moveForward = false;
+                break;
+            case 'KeyA':
+            case 'ArrowLeft':
+                moveLeft = false;
+                break;
+            case 'KeyS':
+            case 'ArrowDown':
+                moveBackward = false;
+                break;
+            case 'KeyD':
+            case 'ArrowRight':
+                moveRight = false;
+                break;
+        }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
+    // ... (LUMIÈRE, CUBE, REDIMENSIONNEMENT - comme avant) ...
     
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-    directionalLight.position.set(5, 10, 7);
-    scene.add(directionalLight);
+    // --- NOUVEAU : CRÉER UN SOL POUR NE PAS TOMBER ---
+    const floorGeometry = new THREE.PlaneGeometry(50, 50, 1, 1);
+    const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x808080, side: THREE.DoubleSide });
+    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+    floor.rotation.x = Math.PI / 2; // Faire pivoter le plan pour qu'il soit horizontal
+    floor.position.y = 0;
+    scene.add(floor);
 
-    // 1.6 GÉRER LE REDIMENSIONNEMENT DE LA FENÊTRE
-    window.addEventListener('resize', onWindowResize, false);
-
-    // 1.7 Lancer la boucle de rendu
-    animate();
+    // ... (animate() est toujours appelé à la fin de init()) ...
 }
 
-// --- 2. BOUCLE DE RENDU (JEU) ---
-// Cette fonction est appelée 60 fois par seconde (ou plus) et met à jour la scène.
+// --- 2. BOUCLE DE RENDU (Mise à jour de animate()) ---
+
+let prevTime = performance.now(); // Pour un mouvement indépendant du framerate
+
 function animate() {
-    requestAnimationFrame(animate); // Demande au navigateur d'appeler 'animate' à nouveau
+    requestAnimationFrame(animate);
+
+    // Calculer le temps écoulé (delta) pour un mouvement fluide
+    const time = performance.now();
+    const delta = (time - prevTime) / 1000; // Delta en secondes
+
+    // Seulement mettre à jour si les contrôles sont actifs (PointerLock)
+    if (isLocked === true) {
+
+        // Décélération progressive (friction)
+        velocity.x -= velocity.x * 10.0 * delta;
+        velocity.z -= velocity.z * 10.0 * delta;
+
+        // Réinitialiser la vitesse
+        velocity.z = 0;
+        velocity.x = 0;
+
+        // Mise à jour de la vitesse selon les touches enfoncées
+        if (moveForward) velocity.z -= speed * delta;
+        if (moveBackward) velocity.z += speed * delta;
+        if (moveLeft) velocity.x -= speed * delta;
+        if (moveRight) velocity.x += speed * delta;
+
+        // Appliquer la vitesse à la position de la caméra
+        controls.moveRight(velocity.x * delta);
+        controls.moveForward(velocity.z * delta);
+        
+        // Simuler la gravité très simplement (sans la librairie de physique pour l'instant)
+        controls.getObject().position.y += velocity.y * delta; 
+        
+        // Si le joueur est sous le sol (y=0), le remettre sur le sol
+        if (controls.getObject().position.y < 2) {
+             velocity.y = 0;
+             controls.getObject().position.y = 2;
+        }
+    }
     
-    // Mouvement d'exemple pour le cube
-    cube.rotation.x += 0.005;
-    cube.rotation.y += 0.005;
+    // Rotation du cube de test (optionnel)
+    // cube.rotation.x += 0.005; 
+    // cube.rotation.y += 0.005;
 
-    // Dessiner la scène avec la caméra actuelle
     renderer.render(scene, camera);
+    
+    prevTime = time;
 }
 
-// --- 3. FONCTION DE REDIMENSIONNEMENT ---
-function onWindowResize() {
-    camera.aspect = window.innerWidth / window.innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
-}
+// ... (onWindowResize() comme avant) ...
 
 // Lancement du programme
 init();
