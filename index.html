@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fortnite 1V1 Build Fight - Démarrage Rapide</title>
+    <title>Fortnite 1V1 Build Fight - 3ème Personne</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; }
         canvas { display: block; }
@@ -42,8 +42,8 @@
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script>
-</head>
+    <script src="https://unpkg.com/three@0.128.0/examples/js/controls/PointerLockControls.js"></script> 
+    </head>
 <body>
     <div id="blocker">
         <div id="instructions">
@@ -51,8 +51,10 @@
             <p style="font-size: 40px; margin-bottom: 20px;">Cliquez pour Jouer</p>
             <p>
                 Mouvement: **Z** / **Q** / **S** / **D**<br/>
+                Regarder: Souris (rotation du personnage)<br/>
+                <br/>
                 Construction: **1** (Mur) / **2** (Sol) / **3** (Rampe)<br/>
-                **CLIC GAUCHE** pour Placer | Échap pour quitter
+                **CLIC GAUCHE** pour Placer | Échap pour quitter<br/>
             </p>
         </div>
     </div>
@@ -60,16 +62,19 @@
 
     <script>
         // --- VARIABLES GLOBALES ---
-        let scene, camera, renderer, controls, playerObject;
+        let scene, camera, renderer, controls; // Controls sera pour le mouvement du player
+        let playerContainer; // Un groupe qui contient le personnage et la caméra
+        let playerMesh; // Le modèle 3D du personnage
+        let thirdPersonCameraOffset = new THREE.Vector3(0, 3, 7); // Décalage caméra (X, Y, Z)
         let prevTime = performance.now();
         const currentModeDisplay = document.getElementById('current-mode');
 
         let isLocked = false, moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
         let velocity = new THREE.Vector3();
-        const speed = 150.0, playerHeight = 2; 
+        const speed = 150.0, playerHeight = 1.8; // Hauteur du personnage (pour le mesh et la collision au sol)
 
         let isBuilding = false, currentStructure = null, ghostMesh = null;
-        const buildSize = 4;
+        const buildSize = 4; // Taille d'un bloc de construction (4x4m)
         const structures = {
             'Wall': { color: 0x6e4e37, geometry: new THREE.BoxGeometry(buildSize, buildSize, 0.2) },
             'Floor': { color: 0x8f8f8f, geometry: new THREE.BoxGeometry(buildSize, 0.2, buildSize) },
@@ -79,31 +84,53 @@
         // --- FONCTION INIT ---
         function init() {
             scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87ceeb);
-            scene.fog = new THREE.Fog(0x87ceeb, 0, 75); 
+            scene.background = new THREE.Color(0x2a0a52); // Couleur de ciel similaire à l'image
+            scene.fog = new THREE.Fog(0x2a0a52, 0, 100); 
+
             camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            camera.position.y = playerHeight; 
+            
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             document.body.appendChild(renderer.domElement);
 
-            controls = new THREE.PointerLockControls(camera, document.body);
-            playerObject = controls.getObject();
-            setupPointerLockEvents();
-            scene.add(playerObject);
+            setupPlayerAndCamera(); // Nouvelle fonction pour le joueur et la caméra 3ème personne
+            setupPointerLockEvents(); // Utilise toujours PointerLock pour la rotation du joueur
 
-            scene.add(new THREE.AmbientLight(0x404040, 3)); 
+            scene.add(new THREE.AmbientLight(0x404040, 2)); 
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(50, 100, 50);
+            directionalLight.position.set(20, 50, 20);
             scene.add(directionalLight);
 
-            createFloor();
+            createCustomMap(); // Nouvelle fonction pour la carte
+
             setupKeyEvents();
             window.addEventListener('resize', onWindowResize, false);
             animate(); 
         }
 
         // --- CONFIGURATION ---
+        function setupPlayerAndCamera() {
+            playerContainer = new THREE.Group(); // Conteneur pour le personnage et la caméra
+            scene.add(playerContainer);
+
+            // Modèle du personnage (un simple cube pour l'instant)
+            const playerGeometry = new THREE.BoxGeometry(0.8, playerHeight, 0.8);
+            const playerMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88 }); // Couleur verte néon
+            playerMesh = new THREE.Mesh(playerGeometry, playerMaterial);
+            playerMesh.position.y = playerHeight / 2; // Positionné au sol
+            playerContainer.add(playerMesh);
+
+            // Positionnement de la caméra derrière le personnage
+            camera.position.copy(thirdPersonCameraOffset);
+            playerContainer.add(camera); // La caméra est enfant du conteneur du joueur
+
+            playerContainer.position.y = 1; // Le personnage commence juste au-dessus du sol (Y=0)
+
+            // PointerLockControls maintenant attaché au CONTENEUR du joueur
+            // Il va gérer la rotation du playerContainer
+            controls = new THREE.PointerLockControls(playerContainer, document.body); 
+        }
+
         function setupPointerLockEvents() {
             const blocker = document.getElementById('blocker');
             const instructions = document.getElementById('instructions');
@@ -153,13 +180,64 @@
             }, false);
         }
 
-        function createFloor() {
-            const floorGeometry = new THREE.PlaneGeometry(100, 100, 1, 1);
-            const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x4a4a4a, side: THREE.DoubleSide });
+        function createCustomMap() {
+            // Sol plat
+            const floorGeometry = new THREE.PlaneGeometry(50, 50, 1, 1);
+            const floorMaterial = new THREE.MeshPhongMaterial({ color: 0x1a0a32, side: THREE.DoubleSide }); // Sol plus foncé
             const floor = new THREE.Mesh(floorGeometry, floorMaterial);
             floor.rotation.x = Math.PI / 2;
             floor.position.y = 0;
             scene.add(floor);
+
+            // Cadre lumineux (comme sur l'image)
+            const lightColor = 0xff00ff; // Rose fluo
+            const lightIntensity = 20;
+            const ringRadius = 18; // Rayon du cadre
+            const tubeRadius = 0.2; // Épaisseur du cadre
+
+            const torusGeometry = new THREE.TorusGeometry(ringRadius, tubeRadius, 8, 50);
+            const torusMaterial = new THREE.MeshBasicMaterial({ color: lightColor });
+            const torus = new THREE.Mesh(torusGeometry, torusMaterial);
+            torus.rotation.x = Math.PI / 2;
+            torus.position.y = 0.1; // Légèrement au-dessus du sol
+            scene.add(torus);
+
+            const pointLight1 = new THREE.PointLight(lightColor, lightIntensity, 50);
+            pointLight1.position.set(ringRadius, 0.5, 0);
+            scene.add(pointLight1);
+            const pointLight2 = new THREE.PointLight(lightColor, lightIntensity, 50);
+            pointLight2.position.set(-ringRadius, 0.5, 0);
+            scene.add(pointLight2);
+            const pointLight3 = new THREE.PointLight(lightColor, lightIntensity, 50);
+            pointLight3.position.set(0, 0.5, ringRadius);
+            scene.add(pointLight3);
+            const pointLight4 = new THREE.PointLight(lightColor, lightIntensity, 50);
+            pointLight4.position.set(0, 0.5, -ringRadius);
+            scene.add(pointLight4);
+
+
+            // Deux rampes au milieu (comme sur l'image)
+            const rampGeometry = new THREE.BoxGeometry(buildSize * 2, buildSize * 0.5, buildSize); // Plus large
+            const rampMaterial = new THREE.MeshPhongMaterial({ color: 0x0a0a0a }); // Couleur sombre
+
+            const ramp1 = new THREE.Mesh(rampGeometry, rampMaterial);
+            ramp1.position.set(-buildSize / 2, buildSize * 0.25, 0); // Légèrement décalé
+            ramp1.rotation.y = Math.PI / 4; // Angle d'inclinaison
+            ramp1.rotation.x = -Math.PI / 8; // Inclinaison de la rampe
+            scene.add(ramp1);
+
+            const ramp2 = new THREE.Mesh(rampGeometry, rampMaterial);
+            ramp2.position.set(buildSize / 2, buildSize * 0.25, 0); // Légèrement décalé
+            ramp2.rotation.y = -Math.PI / 4; // Angle d'inclinaison opposé
+            ramp2.rotation.x = -Math.PI / 8; // Inclinaison de la rampe
+            scene.add(ramp2);
+
+            // Un petit cube entre les rampes (comme sur l'image)
+            const centerCubeGeometry = new THREE.BoxGeometry(1, 1, 1);
+            const centerCubeMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // Rose fluo
+            const centerCube = new THREE.Mesh(centerCubeGeometry, centerCubeMaterial);
+            centerCube.position.y = 0.5;
+            scene.add(centerCube);
         }
 
         function onWindowResize() {
@@ -224,9 +302,12 @@
         }
 
         function updateGhostPosition() {
-            const playerPosition = playerObject.position;
-            const direction = new THREE.Vector3();
-            camera.getWorldDirection(direction);
+            // Utiliser la position du playerContainer, pas directement la caméra
+            const playerPosition = playerContainer.position; 
+            
+            // La direction est donnée par la rotation du playerContainer
+            const direction = new THREE.Vector3(0, 0, -1); // Par défaut, "devant" le conteneur
+            direction.applyQuaternion(playerContainer.quaternion); // Appliquer la rotation du joueur
             direction.normalize();
 
             let targetPosition = playerPosition.clone().add(direction.multiplyScalar(buildSize * 2)); 
@@ -237,7 +318,11 @@
             if (currentStructure === 'Wall') {
                 snappedY += buildSize / 2;
                 ghostMesh.position.set(snappedX, snappedY, snappedZ);
-                ghostMesh.rotation.y = (Math.abs(direction.x) > Math.abs(direction.z)) ? Math.PI / 2 : 0;
+                // Orientation du mur par rapport à la direction du joueur
+                const playerDirAngle = Math.atan2(direction.x, direction.z);
+                const snappedAngle = Math.round(playerDirAngle / (Math.PI / 2)) * (Math.PI / 2);
+                ghostMesh.rotation.y = snappedAngle;
+
             } else if (currentStructure === 'Floor') {
                 snappedY += 0.1;
                 ghostMesh.position.set(snappedX, snappedY, snappedZ);
@@ -245,6 +330,7 @@
             } else if (currentStructure === 'Ramp') {
                 snappedY += buildSize / 4; 
                 ghostMesh.position.set(snappedX, snappedY, snappedZ);
+                
                 let angle = Math.atan2(direction.x, direction.z);
                 ghostMesh.rotation.y = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2);
             }
@@ -265,16 +351,18 @@
                 if (moveLeft) velocity.x -= speed * delta;
                 if (moveRight) velocity.x += speed * delta;
 
-                controls.moveRight(velocity.x * delta);
-                controls.moveForward(velocity.z * delta);
+                // Appliquer les mouvements au playerContainer, pas directement à la caméra
+                playerContainer.translateX(velocity.x * delta);
+                playerContainer.translateZ(velocity.z * delta);
                 
-                if (playerObject.position.y > playerHeight) {
+                // Gravité et Plan de sol simple
+                if (playerContainer.position.y > 1) { // 1 est la hauteur du "centre" du playerContainer
                     velocity.y -= 9.8 * delta; 
                 } else {
                     velocity.y = 0;
-                    playerObject.position.y = playerHeight; 
+                    playerContainer.position.y = 1; // Le playerContainer est ancré au sol
                 }
-                playerObject.position.y += velocity.y * delta;
+                playerContainer.position.y += velocity.y * delta;
                 
                 if (isBuilding && ghostMesh) {
                     updateGhostPosition();
@@ -284,11 +372,8 @@
             prevTime = time;
         }
 
-        // Lance le jeu après le chargement du DOM
         document.addEventListener('DOMContentLoaded', (event) => {
-            if (typeof init === 'function') {
-                init();
-            }
+            init();
         });
     </script>
 </body>
