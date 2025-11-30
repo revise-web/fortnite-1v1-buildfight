@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>1v1 Buildfight - Demo</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div id="ui">
+    <div id="topbar">
+      <span id="room">Room: Demo</span>
+      <span id="myname"></span>
+      <button id="respawn">Respawn</button>
+    </div>
+    <canvas id="game" width="1000" height="600"></canvas>
+    <div id="hint">WASD to move, SPACE to jump, Click to shoot, Right-click to place block, Shift+Right-click to remove block</div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/client.js"></script>
+</body>
+</html>
